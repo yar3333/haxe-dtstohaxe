@@ -1,11 +1,9 @@
 /// <reference path="typings/globals/node/index.d.ts" />
 "use strict";
-var fs_1 = require("fs");
-var ts = require("typescript");
-var Tokens = (function () {
-    function Tokens() {
-    }
-    Tokens.getAll = function () {
+const fs_1 = require("fs");
+const ts = require("typescript");
+class Tokens {
+    static getAll() {
         var r = [];
         r[0] = "Unknown";
         r[1] = "EndOfFileToken";
@@ -323,63 +321,86 @@ var Tokens = (function () {
         r[273] = "FirstJSDocTagNode";
         r[285] = "LastJSDocTagNode";
         return r;
-    };
-    return Tokens;
-}());
-var DtsFileProcessor = (function () {
-    function DtsFileProcessor(sourceFile) {
-        this.sourceFile = sourceFile;
-        this.tokens = Tokens.getAll();
-        this.printNode(sourceFile, "");
-        //this.processNode(sourceFile);
     }
-    DtsFileProcessor.prototype.printNode = function (node, indent) {
-        var _this = this;
-        console.log(indent + this.tokens[node.kind]);
-        ts.forEachChild(node, function (x) { return _this.printNode(x, indent + "    "); });
-    };
-    DtsFileProcessor.prototype.processNode = function (node) {
-        var _this = this;
-        switch (node.kind) {
-            case ts.SyntaxKind.ForStatement:
-            case ts.SyntaxKind.ForInStatement:
-            case ts.SyntaxKind.WhileStatement:
-            case ts.SyntaxKind.DoStatement:
-                if (node.statement.kind !== ts.SyntaxKind.Block) {
-                    this.report(node, "A looping statement's contents should be wrapped in a block body.");
-                }
-                break;
-            case ts.SyntaxKind.IfStatement:
-                var ifStatement = node;
-                if (ifStatement.thenStatement.kind !== ts.SyntaxKind.Block) {
-                    this.report(ifStatement.thenStatement, "An if statement's contents should be wrapped in a block body.");
-                }
-                if (ifStatement.elseStatement &&
-                    ifStatement.elseStatement.kind !== ts.SyntaxKind.Block &&
-                    ifStatement.elseStatement.kind !== ts.SyntaxKind.IfStatement) {
-                    this.report(ifStatement.elseStatement, "An else statement's contents should be wrapped in a block body.");
-                }
-                break;
-            case ts.SyntaxKind.BinaryExpression:
-                var op = node.operatorToken.kind;
-                if (op === ts.SyntaxKind.EqualsEqualsToken || op == ts.SyntaxKind.ExclamationEqualsToken) {
-                    this.report(node, "Use '===' and '!=='.");
-                }
-                break;
-        }
-        ts.forEachChild(node, function (x) { return _this.processNode(x); });
-    };
-    DtsFileProcessor.prototype.report = function (node, message) {
-        var _a = this.sourceFile.getLineAndCharacterOfPosition(node.getStart()), line = _a.line, character = _a.character;
-        console.log(this.sourceFile.fileName + " (" + (line + 1) + "," + (character + 1) + "): " + message);
-    };
-    return DtsFileProcessor;
-}());
+}
+class DtsFileProcessor {
+    constructor(sourceFile) {
+        this.sourceFile = sourceFile;
+        this.indent = "";
+        this.tokens = Tokens.getAll();
+        this.processRoot(sourceFile);
+    }
+    processRoot(node) {
+        this.processNode(node, () => {
+            switch (node.kind) {
+                case ts.SyntaxKind.SourceFile:
+                    this.processChildren(node, new Map([
+                        [ts.SyntaxKind.ImportDeclaration, (x) => this.processImportDeclaration(x)],
+                        [ts.SyntaxKind.EndOfFileToken, (x) => { }]
+                    ]));
+                    break;
+                default:
+                    console.log(this.indent + "^----- UNKNOW ROOT ELEMENT");
+                    this.logSubTree(node);
+            }
+        });
+    }
+    processImportDeclaration(node) {
+        this.processChildren(node, new Map([
+            [ts.SyntaxKind.ImportClause, (x) => {
+                    this.processChildren(x, new Map([
+                        [ts.SyntaxKind.NamedImports, (y) => {
+                                this.processChildren(y, new Map([
+                                    [ts.SyntaxKind.ImportSpecifier, (z) => {
+                                            this.processChildren(z, new Map([
+                                                [ts.SyntaxKind.Identifier, (t) => {
+                                                        console.log("IDEN = " + t.text);
+                                                    }]
+                                            ]));
+                                        }]
+                                ]));
+                            }]
+                    ]));
+                }],
+            [ts.SyntaxKind.StringLiteral, (x) => {
+                    console.log("TEXT = " + x.text);
+                }]
+        ]));
+    }
+    processChildren(node, map) {
+        ts.forEachChild(node, x => {
+            var f = map.get(x.kind);
+            if (f) {
+                this.processNode(x, () => f(x));
+            }
+            else {
+                console.log(this.indent + "vvvvv----IGNORE ----vvvvv");
+                this.processNode(x, () => this.logSubTree(x));
+                console.log(this.indent + "^^^^^----IGNORE ----^^^^^");
+            }
+        });
+    }
+    logSubTree(node) {
+        ts.forEachChild(node, x => {
+            this.processNode(x, () => this.logSubTree(x));
+        });
+    }
+    processNode(node, callb) {
+        console.log(this.indent + this.tokens[node.kind]);
+        this.indent += "    ";
+        callb();
+        this.indent = this.indent.substring(0, this.indent.length - 4);
+    }
+    report(node, message) {
+        let obj = this.sourceFile.getLineAndCharacterOfPosition(node.getStart());
+        console.log(`${this.sourceFile.fileName} (${obj.line + 1},${obj.character + 1}): ${message}`);
+    }
+}
 console.log("----------------------------------------------");
-var fileNames = process.argv.slice(2);
-fileNames.forEach(function (fileName) {
+const fileNames = process.argv.slice(2);
+fileNames.forEach(fileName => {
     console.log("Process file " + fileName);
-    var sourceFile = ts.createSourceFile(fileName, fs_1.readFileSync(fileName).toString(), ts.ScriptTarget.ES6, /*setParentNodes */ true);
+    let sourceFile = ts.createSourceFile(fileName, fs_1.readFileSync(fileName).toString(), ts.ScriptTarget.ES6, /*setParentNodes */ true);
     new DtsFileProcessor(sourceFile);
 });
 ////////////////////////////////////////////////////////////////////////

@@ -327,57 +327,99 @@ class Tokens
     }
 }
 
-class DtsFileProcessor
-{
+class DtsFileProcessor {
+
     private tokens : string[];
+    private indent = "";
 
     constructor(private sourceFile: ts.SourceFile) {
         this.tokens = Tokens.getAll();
-        this.printNode(sourceFile, "");
-        //this.processNode(sourceFile);
+        this.processRoot(sourceFile);
     }
 
-    private printNode(node: ts.Node, indent:string) {
-        console.log(indent + this.tokens[node.kind]);
-        ts.forEachChild(node, (x) => this.printNode(x, indent + "    "));
+    private processRoot(node: ts.Node) {
+        this.processNode(node, () => {
+            switch (node.kind) {
+                case ts.SyntaxKind.SourceFile:
+                    this.processChildren(node, new Map<number, (node:any) => void>(
+                    [
+                        [ ts.SyntaxKind.ImportDeclaration, (x) => this.processImportDeclaration(<ts.ImportDeclaration>x) ],
+                        [ ts.SyntaxKind.EndOfFileToken, (x) => {} ]
+                    ]));
+                    break;
+
+                default:
+                    console.log(this.indent + "^----- UNKNOW ROOT ELEMENT");
+                    this.logSubTree(node);
+            }
+        });
+    }
+    
+    private processImportDeclaration(node:ts.ImportDeclaration) {
+        this.processChildren(node, new Map<number, (node:any) => void>(
+        [
+            [ ts.SyntaxKind.ImportClause, (x) => {
+                this.processChildren(x, new Map<number, (node:any) => void>(
+                [
+                    [ ts.SyntaxKind.NamedImports, (y:ts.NamedImports) => {
+                        this.processChildren(y, new Map<number, (node:any) => void>(
+                        [
+                            [ ts.SyntaxKind.ImportSpecifier, (z:ts.ImportSpecifier) => {
+                                this.processChildren(z, new Map<number, (node:any) => void>(
+                                [
+                                    [ ts.SyntaxKind.Identifier, (t:ts.Identifier) => {
+                                        console.log("IDEN = " + t.text);
+                                    }]
+                                ]))
+                            }]
+                        ]))
+                    }]
+                ]))
+            }],
+
+            [ ts.SyntaxKind.StringLiteral, (x:ts.StringLiteral) => {
+                console.log("TEXT = " + x.text);
+            }]
+        ]));
     }
 
-    private processNode(node: ts.Node) {
-        switch (node.kind) {
-            case ts.SyntaxKind.ForStatement:
-            case ts.SyntaxKind.ForInStatement:
-            case ts.SyntaxKind.WhileStatement:
-            case ts.SyntaxKind.DoStatement:
-                if ((<ts.IterationStatement>node).statement.kind !== ts.SyntaxKind.Block) {
-                    this.report(node, "A looping statement's contents should be wrapped in a block body.");
-                }
-                break;
-
-            case ts.SyntaxKind.IfStatement:
-                let ifStatement = (<ts.IfStatement>node);
-                if (ifStatement.thenStatement.kind !== ts.SyntaxKind.Block) {
-                    this.report(ifStatement.thenStatement, "An if statement's contents should be wrapped in a block body.");
-                }
-                if (ifStatement.elseStatement &&
-                    ifStatement.elseStatement.kind !== ts.SyntaxKind.Block &&
-                    ifStatement.elseStatement.kind !== ts.SyntaxKind.IfStatement) {
-                    this.report(ifStatement.elseStatement, "An else statement's contents should be wrapped in a block body.");
-                }
-                break;
-
-            case ts.SyntaxKind.BinaryExpression:
-                let op = (<ts.BinaryExpression>node).operatorToken.kind;
-                if (op === ts.SyntaxKind.EqualsEqualsToken || op == ts.SyntaxKind.ExclamationEqualsToken) {
-                    this.report(node, "Use '===' and '!=='.")
-                }
-                break;
-        }
-        ts.forEachChild(node, (x) => this.processNode(x));
+    private processChildren(node:ts.Node, map:Map<number, (node:any) => void>)
+    {
+         ts.forEachChild(node, x =>
+         {
+             var f = map.get(x.kind);
+             if (f)
+             {
+                 this.processNode(x, () => f(x));
+             }
+             else {
+                console.log(this.indent + "vvvvv----IGNORE ----vvvvv");
+                this.processNode(x, () => this.logSubTree(x));
+                console.log(this.indent + "^^^^^----IGNORE ----^^^^^");
+             }
+         });
     }
 
-    private report(node: ts.Node, message: string) {
-        let { line, character } = this.sourceFile.getLineAndCharacterOfPosition(node.getStart());
-        console.log(`${this.sourceFile.fileName} (${line + 1},${character + 1}): ${message}`);
+    private logSubTree(node: ts.Node)
+    {
+        ts.forEachChild(node, x =>
+        {
+           this.processNode(x, () => this.logSubTree(x));
+        });
+    }
+
+    private processNode(node: ts.Node, callb:any)
+    {
+        console.log(this.indent + this.tokens[node.kind]);
+        this.indent += "    ";
+        callb();
+        this.indent = this.indent.substring(0, this.indent.length - 4);
+    }
+
+    private report(node: ts.Node, message: string)
+    {
+        let obj = this.sourceFile.getLineAndCharacterOfPosition(node.getStart());
+        console.log(`${this.sourceFile.fileName} (${obj.line + 1},${obj.character + 1}): ${message}`);
     }
 }
 

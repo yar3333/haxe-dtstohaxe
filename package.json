@@ -3,13 +3,12 @@
   "version": "1.0.0",
   "description": "",
   "main": "DtsToHaxe.js",
-  "dependencies": {
-  },
+  "dependencies": {},
   "devDependencies": {
     "typescript": "^2.0.3"
   },
   "scripts": {
-    "build": "tsc DtsToHaxe.ts",
+    "build": "tsc",
     "start": "node DtsToHaxe.js test.d.ts",
     "build-and-start": "npm run build && npm start"
   },
