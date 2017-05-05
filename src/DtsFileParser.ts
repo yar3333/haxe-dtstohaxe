@@ -2,11 +2,13 @@
 
 import * as ts from "typescript";
 import { Tokens } from "./Tokens";
+import { TsToHaxeStdTypes } from "./TsToHaxeStdTypes";
 import { HaxeClassOrInterface, HaxeVar } from "./HaxeClassOrInterface";
 
 export class DtsFileParser
 {
     private tokens : string[];
+    private typeMapper : Map<string, string>;
     private indent = "";
 
     private imports = new Array<string>();
@@ -15,6 +17,7 @@ export class DtsFileParser
     constructor(private sourceFile: ts.SourceFile)
     {
         this.tokens = Tokens.getAll();
+        this.typeMapper = TsToHaxeStdTypes.getAll();
     }
 
     public parse() : Array<HaxeClassOrInterface>
@@ -97,7 +100,7 @@ export class DtsFileParser
         [
             [ ts.SyntaxKind.ExportKeyword, (x) => {} ],
             [ ts.SyntaxKind.Identifier, (x:ts.Identifier) => item.fullClassName = x.text ],
-            [ ts.SyntaxKind.HeritageClause, (x:ts.HeritageClause) => item.baseFullInterfaceNames = x.types.map(y => y.getText()) ],
+            [ ts.SyntaxKind.HeritageClause, (x:ts.HeritageClause) => this.processHeritageClauseForClass(x, item) ],
             [ ts.SyntaxKind.PropertyDeclaration, (x:ts.PropertyDeclaration) => this.processPropertyDeclaration(x, item) ],
             [ ts.SyntaxKind.MethodDeclaration, (x:ts.MethodDeclaration) => this.processMethodDeclaration(x, item)]
         ]));
@@ -105,24 +108,38 @@ export class DtsFileParser
         this.classesAndInterfaces.push(item);
     }
 
+    private processHeritageClauseForClass(x:ts.HeritageClause, dest:HaxeClassOrInterface)
+    {
+        switch (x.token)
+        {
+            case ts.SyntaxKind.ExtendsKeyword:
+                dest.baseFullClassName = x.types.map(y => y.getText()).toString();
+                break;
+
+            case ts.SyntaxKind.ImplementsKeyword:
+                dest.baseFullInterfaceNames = x.types.map(y => y.getText());
+                break;
+        }
+    }
+
     private processPropertySignature(x:ts.PropertySignature, dest:HaxeClassOrInterface)
     {
-        dest.addVar(this.createVar(x.name.getText(), x.type.getText()));
+        dest.addVar(this.createVar(x.name.getText(), x.type));
     }
 
     private processMethodSignature(x:ts.MethodSignature, dest:HaxeClassOrInterface)
     {
-        dest.addMethod(x.name.getText(), x.parameters.map(p => this.createVar(p.name.getText(), p.type ? p.type.getText() : "")), x.type ? x.type.getText() : "", null);
+        dest.addMethod(x.name.getText(), x.parameters.map(p => this.createVar(p.name.getText(), p.type)), this.convertType(x.type), null);
     }
 
     private processPropertyDeclaration(x:ts.PropertyDeclaration, dest:HaxeClassOrInterface)
     {
-        dest.addVar(this.createVar(x.name.getText(), x.type.getText()));
+        dest.addVar(this.createVar(x.name.getText(), x.type));
     }
 
     private processMethodDeclaration(x:ts.MethodDeclaration, dest:HaxeClassOrInterface)
     {
-        dest.addMethod(x.name.getText(), x.parameters.map(p => this.createVar(p.name.getText(), p.type ? p.type.getText() : "")), x.type ? x.type.getText() : "", null);
+        dest.addMethod(x.name.getText(), x.parameters.map(p => this.createVar(p.name.getText(), p.type)), this.convertType(x.type), null);
     }
 
     private processChildren(node:ts.Node, map:Map<number, (node:any) => void>)
@@ -169,12 +186,32 @@ export class DtsFileParser
         for (let id of ids) this.imports.push(moduleFilePath.replace("/", ".") + "." + id);
     }
 
-    private createVar(name:string, type:string, defaultValue?:string) : HaxeVar
+    private createVar(name:string, type:ts.Node, defaultValue?:string) : HaxeVar
     {
         return {
             haxeName: name,
-            haxeType: type,
+            haxeType: this.convertType(type),
             haxeDefVal: defaultValue
         };
+    }
+
+    // TODO: arrays
+    private convertType(node:ts.Node) : string
+    {
+        if (!node) return "Dynamic";
+
+        switch (node.kind)
+        {
+            case ts.SyntaxKind.FunctionType:
+                var t = <ts.FunctionTypeNode>node;
+                var types = [];
+                for (var p of t.parameters) types.push(this.convertType(p.type));
+                types.push(this.convertType(t.type));
+                return types.join("->");
+
+            default:
+                var s = node.getText();
+                return this.typeMapper.get(s) ? this.typeMapper.get(s) : s;
+        }
     }
 }

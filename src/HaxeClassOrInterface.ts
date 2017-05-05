@@ -113,7 +113,7 @@ export class HaxeClassOrInterface
 		switch (this.type)
 		{
 			case "class":
-				s += (this.baseFullClassName != null ? " extends " + this.baseFullClassName : "") + "\n";
+				s += (this.baseFullClassName ? " extends " + this.baseFullClassName : "") + "\n";
 				if (this.baseFullInterfaceNames.length > 0) s += "\timplements " + this.baseFullInterfaceNames.join(", ") + "\n";
 				break;
 
