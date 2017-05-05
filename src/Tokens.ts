@@ -1,9 +1,7 @@
-/// <reference path="typings/globals/node/index.d.ts" />
-"use strict";
-const fs_1 = require("fs");
-const ts = require("typescript");
-class Tokens {
-    static getAll() {
+export class Tokens
+{
+    static getAll() : string[]
+    {
         var r = [];
         r[0] = "Unknown";
         r[1] = "EndOfFileToken";
@@ -323,84 +321,3 @@ class Tokens {
         return r;
     }
 }
-class DtsFileProcessor {
-    constructor(sourceFile) {
-        this.sourceFile = sourceFile;
-        this.indent = "";
-        this.tokens = Tokens.getAll();
-        this.processRoot(sourceFile);
-    }
-    processRoot(node) {
-        this.processNode(node, () => {
-            switch (node.kind) {
-                case ts.SyntaxKind.SourceFile:
-                    this.processChildren(node, new Map([
-                        [ts.SyntaxKind.ImportDeclaration, (x) => this.processImportDeclaration(x)],
-                        [ts.SyntaxKind.EndOfFileToken, (x) => { }]
-                    ]));
-                    break;
-                default:
-                    console.log(this.indent + "^----- UNKNOW ROOT ELEMENT");
-                    this.logSubTree(node);
-            }
-        });
-    }
-    processImportDeclaration(node) {
-        this.processChildren(node, new Map([
-            [ts.SyntaxKind.ImportClause, (x) => {
-                    this.processChildren(x, new Map([
-                        [ts.SyntaxKind.NamedImports, (y) => {
-                                this.processChildren(y, new Map([
-                                    [ts.SyntaxKind.ImportSpecifier, (z) => {
-                                            this.processChildren(z, new Map([
-                                                [ts.SyntaxKind.Identifier, (t) => {
-                                                        console.log("IDEN = " + t.text);
-                                                    }]
-                                            ]));
-                                        }]
-                                ]));
-                            }]
-                    ]));
-                }],
-            [ts.SyntaxKind.StringLiteral, (x) => {
-                    console.log("TEXT = " + x.text);
-                }]
-        ]));
-    }
-    processChildren(node, map) {
-        ts.forEachChild(node, x => {
-            var f = map.get(x.kind);
-            if (f) {
-                this.processNode(x, () => f(x));
-            }
-            else {
-                console.log(this.indent + "vvvvv----IGNORE ----vvvvv");
-                this.processNode(x, () => this.logSubTree(x));
-                console.log(this.indent + "^^^^^----IGNORE ----^^^^^");
-            }
-        });
-    }
-    logSubTree(node) {
-        ts.forEachChild(node, x => {
-            this.processNode(x, () => this.logSubTree(x));
-        });
-    }
-    processNode(node, callb) {
-        console.log(this.indent + this.tokens[node.kind]);
-        this.indent += "    ";
-        callb();
-        this.indent = this.indent.substring(0, this.indent.length - 4);
-    }
-    report(node, message) {
-        let obj = this.sourceFile.getLineAndCharacterOfPosition(node.getStart());
-        console.log(`${this.sourceFile.fileName} (${obj.line + 1},${obj.character + 1}): ${message}`);
-    }
-}
-console.log("----------------------------------------------");
-const fileNames = process.argv.slice(2);
-fileNames.forEach(fileName => {
-    console.log("Process file " + fileName);
-    let sourceFile = ts.createSourceFile(fileName, fs_1.readFileSync(fileName).toString(), ts.ScriptTarget.ES6, /*setParentNodes */ true);
-    new DtsFileProcessor(sourceFile);
-});
-////////////////////////////////////////////////////////////////////////

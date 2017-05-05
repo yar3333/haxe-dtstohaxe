@@ -2,14 +2,14 @@
   "name": "dts-to-haxe",
   "version": "1.0.0",
   "description": "",
-  "main": "DtsToHaxe.js",
+  "main": "bin/DtsToHaxe.js",
   "dependencies": {},
   "devDependencies": {
     "typescript": "^2.0.3"
   },
   "scripts": {
     "build": "tsc",
-    "start": "node DtsToHaxe.js test.d.ts",
+    "start": "node bin/DtsToHaxe.js tests/test.d.ts",
     "build-and-start": "npm run build && npm start"
   },
   "keywords": [],
