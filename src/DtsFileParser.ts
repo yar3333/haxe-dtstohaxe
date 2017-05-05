@@ -195,7 +195,6 @@ export class DtsFileParser
         };
     }
 
-    // TODO: arrays
     private convertType(node:ts.Node) : string
     {
         if (!node) return "Dynamic";
@@ -203,11 +202,19 @@ export class DtsFileParser
         switch (node.kind)
         {
             case ts.SyntaxKind.FunctionType:
-                var t = <ts.FunctionTypeNode>node;
-                var types = [];
+            {
+                let t = <ts.FunctionTypeNode>node;
+                let types = [];
                 for (var p of t.parameters) types.push(this.convertType(p.type));
                 types.push(this.convertType(t.type));
                 return types.join("->");
+            }
+
+            case ts.SyntaxKind.ArrayType:
+            {
+                let t = <ts.ArrayTypeNode>node;
+                return "Array<" + this.convertType(t.elementType) + ">";
+            }
 
             default:
                 var s = node.getText();
