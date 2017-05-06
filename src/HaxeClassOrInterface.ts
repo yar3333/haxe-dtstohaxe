@@ -28,9 +28,10 @@ export class HaxeClassOrInterface
 	private methods = new Array<string>();
 	private customs = new Array<string>();
 	
-	constructor(type:"class"|"interface")
+	constructor(type:"class"|"interface", fullClassName="")
 	{
 		this.type = type;
+		this.fullClassName = fullClassName;
 	}
 	
 	public addImport(packageName:string) : void

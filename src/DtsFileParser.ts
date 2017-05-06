@@ -1,5 +1,6 @@
 /// <reference path="../typings/globals/node/index.d.ts" />
 
+import { basename } from "path";
 import * as ts from "typescript";
 import { Tokens } from "./Tokens";
 import { TsToHaxeStdTypes } from "./TsToHaxeStdTypes";
@@ -32,6 +33,7 @@ export class DtsFileParser
                         [ ts.SyntaxKind.ImportDeclaration, (x:ts.ImportDeclaration) => this.processImportDeclaration(x) ],
                         [ ts.SyntaxKind.InterfaceDeclaration, (x:ts.InterfaceDeclaration) => this.processInterfaceDeclaration(x) ],
                         [ ts.SyntaxKind.ClassDeclaration, (x:ts.ClassDeclaration) => this.processClassDeclaration(x) ],
+                        [ ts.SyntaxKind.VariableStatement, (x:ts.VariableStatement) => this.processVariableStatement(x) ],
                         [ ts.SyntaxKind.EndOfFileToken, (x) => {} ]
                     ]));
                     break;
@@ -45,6 +47,17 @@ export class DtsFileParser
         return this.classesAndInterfaces;
     }
     
+    private processVariableStatement(node:ts.VariableStatement)
+    {
+        if (!this.isFlag(node, ts.NodeFlags.Export)) return;
+        
+        for (var decl of node.declarationList.declarations)
+        {
+            var isReadOnly = this.isFlag(node.declarationList, ts.NodeFlags.Const) || this.isFlag(node.declarationList, ts.NodeFlags.Readonly);
+            this.getModuleClass(node).addVar(this.createVar(decl.name.getText(), decl.type, null, this.getJsDoc(decl.name)), false, true, isReadOnly);
+        }
+    }
+
     private processImportDeclaration(node:ts.ImportDeclaration)
     {
         var ids = new Array<string>();
@@ -261,8 +274,21 @@ export class DtsFileParser
         return symbol ? ts.displayPartsToString(symbol.getDocumentationComment()) : "";
     }
 
-    private isFlag(mods:ts.ModifiersArray, f:ts.NodeFlags) : boolean
+    private isFlag(mods:{ flags:ts.NodeFlags }, f:ts.NodeFlags) : boolean
     {
         return mods && mods.flags && (mods.flags & f) !== 0;
+    }
+
+    private capitalize(s:string) : string
+    {
+        return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+
+    private getModuleClass(node:ts.Node) : HaxeClassOrInterface
+    {
+        var moduleName = this.capitalize(basename(node.getSourceFile().fileName, ".d.ts"));
+        var moduleClass = this.classesAndInterfaces.find(x => x.fullClassName == moduleName);
+        if (!moduleClass) this.classesAndInterfaces.push(moduleClass = new HaxeClassOrInterface("class", moduleName));
+        return moduleClass;
     }
 }

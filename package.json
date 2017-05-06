@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node bin/DtsToHaxe.js tests/test.d.ts",
+    "start": "node bin/DtsToHaxe.js tests/consts.d.ts",
     "build-and-start": "npm run build && npm start"
   },
   "keywords": [],
