@@ -14,7 +14,7 @@ export class DtsFileParser
     private imports = new Array<string>();
     private classesAndInterfaces = new Array<HaxeClassOrInterface>();
 
-    constructor(private sourceFile: ts.SourceFile)
+    constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker)
     {
         this.tokens = Tokens.getAll();
         this.typeMapper = TsToHaxeStdTypes.getAll();
@@ -22,7 +22,7 @@ export class DtsFileParser
 
     public parse() : Array<HaxeClassOrInterface>
     {
-        var node = this.sourceFile;
+        const node = this.sourceFile;
 
         this.processNode(node, () => {
             switch (node.kind) {
@@ -96,13 +96,16 @@ export class DtsFileParser
     {
         var item = new HaxeClassOrInterface("class");
         
+        item.docComment = this.getJsDoc(node.name);
+
         this.processChildren(node, new Map<number, (node:any) => void>(
         [
             [ ts.SyntaxKind.ExportKeyword, (x) => {} ],
             [ ts.SyntaxKind.Identifier, (x:ts.Identifier) => item.fullClassName = x.text ],
             [ ts.SyntaxKind.HeritageClause, (x:ts.HeritageClause) => this.processHeritageClauseForClass(x, item) ],
             [ ts.SyntaxKind.PropertyDeclaration, (x:ts.PropertyDeclaration) => this.processPropertyDeclaration(x, item) ],
-            [ ts.SyntaxKind.MethodDeclaration, (x:ts.MethodDeclaration) => this.processMethodDeclaration(x, item)]
+            [ ts.SyntaxKind.MethodDeclaration, (x:ts.MethodDeclaration) => this.processMethodDeclaration(x, item)],
+            [ ts.SyntaxKind.Constructor, (x:ts.ConstructorDeclaration) => this.processConstructor(x, item)]
         ]));
 
         this.classesAndInterfaces.push(item);
@@ -124,22 +127,51 @@ export class DtsFileParser
 
     private processPropertySignature(x:ts.PropertySignature, dest:HaxeClassOrInterface)
     {
-        dest.addVar(this.createVar(x.name.getText(), x.type));
+        dest.addVar(this.createVar(x.name.getText(), x.type, null, this.getJsDoc(x.name)));
     }
 
     private processMethodSignature(x:ts.MethodSignature, dest:HaxeClassOrInterface)
     {
-        dest.addMethod(x.name.getText(), x.parameters.map(p => this.createVar(p.name.getText(), p.type)), this.convertType(x.type), null);
+        dest.addMethod(
+            x.name.getText(),
+            x.parameters.map(p => this.createVar(p.name.getText(), p.type, null, this.getJsDoc(p.name))),
+            this.convertType(x.type),
+            null,
+            this.isFlag(x.modifiers, ts.NodeFlags.Private),
+            this.isFlag(x.modifiers, ts.NodeFlags.Static),
+            this.getJsDoc(x.name)
+        );
     }
 
     private processPropertyDeclaration(x:ts.PropertyDeclaration, dest:HaxeClassOrInterface)
     {
-        dest.addVar(this.createVar(x.name.getText(), x.type));
+        dest.addVar(this.createVar(x.name.getText(), x.type, null, this.getJsDoc(x.name)));
     }
 
     private processMethodDeclaration(x:ts.MethodDeclaration, dest:HaxeClassOrInterface)
     {
-        dest.addMethod(x.name.getText(), x.parameters.map(p => this.createVar(p.name.getText(), p.type)), this.convertType(x.type), null);
+        dest.addMethod(
+            x.name.getText(),
+            x.parameters.map(p => this.createVar(p.name.getText(), p.type, null, this.getJsDoc(p.name))),
+            this.convertType(x.type),
+            null,
+            this.isFlag(x.modifiers, ts.NodeFlags.Private),
+            this.isFlag(x.modifiers, ts.NodeFlags.Static),
+            this.getJsDoc(x.name)
+        );
+    }
+
+    private processConstructor(x:ts.ConstructorDeclaration, dest:HaxeClassOrInterface)
+    {
+        dest.addMethod(
+            "new",
+            x.parameters.map(p => this.createVar(p.name.getText(), p.type, null, this.getJsDoc(p.name))),
+            "Void",
+            null,
+            this.isFlag(x.modifiers, ts.NodeFlags.Private),
+            this.isFlag(x.modifiers, ts.NodeFlags.Static),
+            this.getJsDoc(x.getFirstToken())
+        );
     }
 
     private processChildren(node:ts.Node, map:Map<number, (node:any) => void>)
@@ -186,12 +218,13 @@ export class DtsFileParser
         for (let id of ids) this.imports.push(moduleFilePath.replace("/", ".") + "." + id);
     }
 
-    private createVar(name:string, type:ts.Node, defaultValue?:string) : HaxeVar
+    private createVar(name:string, type:ts.Node, defaultValue:string, jsDoc:string) : HaxeVar
     {
         return {
             haxeName: name,
             haxeType: this.convertType(type),
-            haxeDefVal: defaultValue
+            haxeDefVal: defaultValue,
+            jsDoc: jsDoc
         };
     }
 
@@ -220,5 +253,16 @@ export class DtsFileParser
                 var s = node.getText();
                 return this.typeMapper.get(s) ? this.typeMapper.get(s) : s;
         }
+    }
+
+    private getJsDoc(node:ts.Node)
+    {
+        var symbol = this.typeChecker.getSymbolAtLocation(node);
+        return symbol ? ts.displayPartsToString(symbol.getDocumentationComment()) : "";
+    }
+
+    private isFlag(mods:ts.ModifiersArray, f:ts.NodeFlags) : boolean
+    {
+        return mods && mods.flags && (mods.flags & f) !== 0;
     }
 }

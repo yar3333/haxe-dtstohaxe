@@ -3,6 +3,7 @@ export interface HaxeVar
 	haxeName : string;
 	haxeType : string;
 	haxeDefVal : string;
+	jsDoc : string;
 }
 
 export interface HaxeVarGetter
@@ -16,6 +17,7 @@ export class HaxeClassOrInterface
 {
 	public type : "class" | "interface";
 
+	docComment = "";
 	fullClassName = "";
 	baseFullClassName = "";
 	baseFullInterfaceNames = new Array<string>();
@@ -43,9 +45,10 @@ export class HaxeClassOrInterface
 	
 	public addVar(v:HaxeVar, isPrivate:boolean=false, isStatic=false, isReadOnlyProperty=false) : void
 	{
-		var s = (isPrivate ? "" : "public ")
-			  + (isStatic ? "static " : "")
-			  + "var " + v.haxeName + (isReadOnlyProperty ? "(default, null)" : "") + " : " + v.haxeType
+		var s = this.jsDocToString(v.jsDoc);
+		s += (isPrivate ? "" : "public ");
+		s += (isStatic ? "static " : "");
+		s += "var " + v.haxeName + (isReadOnlyProperty ? "(default, null)" : "") + " : " + v.haxeType
 			  + (isStatic && v.haxeDefVal != null ? " = " + v.haxeDefVal : "")
 			  + ";";
 		this.vars.push(s);
@@ -68,10 +71,11 @@ export class HaxeClassOrInterface
 		this.vars.push(s);
 	}
 	
-	public addMethod(name:string, vars:Array<HaxeVar>, retType:string, body:string, isPrivate=false, isStatic=false) : void
+	public addMethod(name:string, vars:Array<HaxeVar>, retType:string, body:string, isPrivate:boolean, isStatic:boolean, jsDoc?:string) : void
 	{
 		var header = 
-				(isPrivate ? '' : 'public ')
+			    this.jsDocToString(jsDoc)
+			  + (isPrivate ? '' : 'public ')
 			  + (isStatic ? 'static  ' : '')
 			  + 'function ' + name + '('
 			  + vars.map((v:HaxeVar) => v.haxeName + ":" + v.haxeType + (v.haxeDefVal != null ? '=' + v.haxeDefVal : '')).join(', ')
@@ -107,6 +111,8 @@ export class HaxeClassOrInterface
 		
 		s += this.imports.join("\n") + (this.imports.length > 0 ? "\n\n" : "");
 		
+		s += this.jsDocToString(this.docComment);
+
 		s += this.metas.map(m => m + "\n").join("\n");
 		s += this.type + " " + clas.className;
 
@@ -123,9 +129,9 @@ export class HaxeClassOrInterface
 		}
 
 		s += "{\n";
-		s += (this.vars.length > 0 ? "\t" + this.vars.join("\n\t") + "\n\n" : "");
-		s += (this.methods.length > 0 ? "\t" + this.methods.join("\n\n\t") + "\n" : "");
-		s += (this.customs.length > 0 ? "\t" + this.customs.join("\n\n\t") + "\n" : "");
+		s += (this.vars.length > 0 ? "\t" + (this.vars.map(x => x.split("\n").join("\n\t"))).join("\n\t") + "\n\n" : "");
+		s += (this.methods.length > 0 ? "\t" + (this.methods.map(x => x.split("\n").join("\n\t"))).join("\n\n\t") + "\n" : "");
+		s += (this.customs.length > 0 ? "\t" + (this.customs.map(x => x.split("\n").join("\n\t"))).join("\n\n\t") + "\n" : "");
 		s += "}";
 
 		return s;
@@ -149,5 +155,11 @@ export class HaxeClassOrInterface
 		}
 		
 		return { packageName:packageName, className:className };
+	}
+
+	private jsDocToString(jsDoc:string) : string
+	{
+		if (jsDoc === null || jsDoc === "") return "";
+		return "/"+"**\n * " + jsDoc.split("\r\n").join("\n").split("\n").join("\n * ") + "\n *" + "/\n";
 	}
 }
