@@ -4,7 +4,7 @@ import { basename } from "path";
 import * as ts from "typescript";
 import { Tokens } from "./Tokens";
 import { TsToHaxeStdTypes } from "./TsToHaxeStdTypes";
-import { HaxeClassOrInterface, HaxeVar } from "./HaxeClassOrInterface";
+import { HaxeTypeDeclaration, HaxeVar } from "./HaxeTypeDeclaration";
 
 export class DtsFileParser
 {
@@ -13,7 +13,7 @@ export class DtsFileParser
     private indent = "";
 
     private imports = new Array<string>();
-    private classesAndInterfaces = new Array<HaxeClassOrInterface>();
+    private classesAndInterfaces = new Array<HaxeTypeDeclaration>();
 
     constructor(private sourceFile: ts.SourceFile, private typeChecker: ts.TypeChecker)
     {
@@ -21,7 +21,7 @@ export class DtsFileParser
         this.typeMapper = TsToHaxeStdTypes.getAll();
     }
 
-    public parse() : Array<HaxeClassOrInterface>
+    public parse() : Array<HaxeTypeDeclaration>
     {
         const node = this.sourceFile;
 
@@ -34,6 +34,7 @@ export class DtsFileParser
                         [ ts.SyntaxKind.InterfaceDeclaration, (x:ts.InterfaceDeclaration) => this.processInterfaceDeclaration(x) ],
                         [ ts.SyntaxKind.ClassDeclaration, (x:ts.ClassDeclaration) => this.processClassDeclaration(x) ],
                         [ ts.SyntaxKind.VariableStatement, (x:ts.VariableStatement) => this.processVariableStatement(x) ],
+                        [ ts.SyntaxKind.EnumDeclaration, (x:ts.EnumDeclaration) => this.processEnumDeclaration(x) ],
                         [ ts.SyntaxKind.EndOfFileToken, (x) => {} ]
                     ]));
                     break;
@@ -91,7 +92,7 @@ export class DtsFileParser
 
     private processInterfaceDeclaration(node:ts.InterfaceDeclaration)
     {
-        var item = new HaxeClassOrInterface("interface");
+        var item = new HaxeTypeDeclaration("interface");
         
         this.processChildren(node, new Map<number, (node:any) => void>(
         [
@@ -107,7 +108,7 @@ export class DtsFileParser
 
     private processClassDeclaration(node:ts.ClassDeclaration)
     {
-        var item = new HaxeClassOrInterface("class");
+        var item = new HaxeTypeDeclaration("class");
         
         item.docComment = this.getJsDoc(node.name);
 
@@ -124,7 +125,28 @@ export class DtsFileParser
         this.classesAndInterfaces.push(item);
     }
 
-    private processHeritageClauseForClass(x:ts.HeritageClause, dest:HaxeClassOrInterface)
+    private processEnumDeclaration(node:ts.EnumDeclaration)
+    {
+        var item = new HaxeTypeDeclaration("enum");
+        
+        item.docComment = this.getJsDoc(node.name);
+
+        this.processChildren(node, new Map<number, (node:any) => void>(
+        [
+            [ ts.SyntaxKind.ExportKeyword, (x) => {} ],
+            [ ts.SyntaxKind.Identifier, (x:ts.Identifier) => item.fullClassName = x.text ],
+            [ ts.SyntaxKind.EnumMember, (x:ts.EnumMember) => this.processEnumMember(x, item) ],
+        ]));
+
+        this.classesAndInterfaces.push(item);
+    }
+
+    private processEnumMember(x:ts.EnumMember, dest:HaxeTypeDeclaration)
+    {
+        dest.addEnumMember(x.name.getText(), x.initializer!=null ? " = " + x.initializer.getText() : "", this.getJsDoc(x.name));
+    }
+
+    private processHeritageClauseForClass(x:ts.HeritageClause, dest:HaxeTypeDeclaration)
     {
         switch (x.token)
         {
@@ -138,12 +160,12 @@ export class DtsFileParser
         }
     }
 
-    private processPropertySignature(x:ts.PropertySignature, dest:HaxeClassOrInterface)
+    private processPropertySignature(x:ts.PropertySignature, dest:HaxeTypeDeclaration)
     {
         dest.addVar(this.createVar(x.name.getText(), x.type, null, this.getJsDoc(x.name)));
     }
 
-    private processMethodSignature(x:ts.MethodSignature, dest:HaxeClassOrInterface)
+    private processMethodSignature(x:ts.MethodSignature, dest:HaxeTypeDeclaration)
     {
         dest.addMethod(
             x.name.getText(),
@@ -156,12 +178,12 @@ export class DtsFileParser
         );
     }
 
-    private processPropertyDeclaration(x:ts.PropertyDeclaration, dest:HaxeClassOrInterface)
+    private processPropertyDeclaration(x:ts.PropertyDeclaration, dest:HaxeTypeDeclaration)
     {
         dest.addVar(this.createVar(x.name.getText(), x.type, null, this.getJsDoc(x.name)));
     }
 
-    private processMethodDeclaration(x:ts.MethodDeclaration, dest:HaxeClassOrInterface)
+    private processMethodDeclaration(x:ts.MethodDeclaration, dest:HaxeTypeDeclaration)
     {
         dest.addMethod(
             x.name.getText(),
@@ -174,7 +196,7 @@ export class DtsFileParser
         );
     }
 
-    private processConstructor(x:ts.ConstructorDeclaration, dest:HaxeClassOrInterface)
+    private processConstructor(x:ts.ConstructorDeclaration, dest:HaxeTypeDeclaration)
     {
         dest.addMethod(
             "new",
@@ -284,11 +306,11 @@ export class DtsFileParser
         return s.charAt(0).toUpperCase() + s.slice(1);
     }
 
-    private getModuleClass(node:ts.Node) : HaxeClassOrInterface
+    private getModuleClass(node:ts.Node) : HaxeTypeDeclaration
     {
         var moduleName = this.capitalize(basename(node.getSourceFile().fileName, ".d.ts"));
         var moduleClass = this.classesAndInterfaces.find(x => x.fullClassName == moduleName);
-        if (!moduleClass) this.classesAndInterfaces.push(moduleClass = new HaxeClassOrInterface("class", moduleName));
+        if (!moduleClass) this.classesAndInterfaces.push(moduleClass = new HaxeTypeDeclaration("class", moduleName));
         return moduleClass;
     }
 }

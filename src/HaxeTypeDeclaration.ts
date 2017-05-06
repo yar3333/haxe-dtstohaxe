@@ -13,9 +13,9 @@ export interface HaxeVarGetter
 	haxeBody : string;
 }
 
-export class HaxeClassOrInterface
+export class HaxeTypeDeclaration
 {
-	public type : "class" | "interface";
+	public type : "class" | "interface" | "enum";
 
 	docComment = "";
 	fullClassName = "";
@@ -27,8 +27,9 @@ export class HaxeClassOrInterface
 	private vars = new Array<string>();
 	private methods = new Array<string>();
 	private customs = new Array<string>();
+	private enumMembers = new Array<string>();
 	
-	constructor(type:"class"|"interface", fullClassName="")
+	constructor(type:"class"|"interface"|"enum", fullClassName="")
 	{
 		this.type = type;
 		this.fullClassName = fullClassName;
@@ -97,6 +98,13 @@ export class HaxeClassOrInterface
 		this.methods.push(s);
  	}
 	
+	public addEnumMember(name:string, value:string, jsDoc:string) : void
+	{
+		var s = this.jsDocToString(jsDoc);
+		s += name + (value != null ? value : "") + ";";
+		this.enumMembers.push(s);
+ 	}
+
 	public addCustom(code:string) : void
 	{
 		this.customs.push(code);
@@ -125,7 +133,12 @@ export class HaxeClassOrInterface
 				break;
 
 			case "interface":
-				if (this.baseFullInterfaceNames.length > 0) s += " extends " + this.baseFullInterfaceNames.join(", ") + "\n";
+				if (this.baseFullInterfaceNames.length > 0) s += " extends " + this.baseFullInterfaceNames.join(", ");
+				s += "\n"
+				break;
+
+			case "enum":
+				s += "\n";
 				break;
 		}
 
@@ -133,6 +146,10 @@ export class HaxeClassOrInterface
 		s += (this.vars.length > 0 ? "\t" + (this.vars.map(x => x.split("\n").join("\n\t"))).join("\n\t") + "\n\n" : "");
 		s += (this.methods.length > 0 ? "\t" + (this.methods.map(x => x.split("\n").join("\n\t"))).join("\n\n\t") + "\n" : "");
 		s += (this.customs.length > 0 ? "\t" + (this.customs.map(x => x.split("\n").join("\n\t"))).join("\n\n\t") + "\n" : "");
+		s += (this.enumMembers.length > 0 ? "\t" + (this.enumMembers.map(x => x.split("\n").join("\n\t"))).join("\n\t") + "\n" : "");
+
+		if (s.endsWith("\n\n")) s = s.substring(0, s.length-1);
+
 		s += "}";
 
 		return s;
